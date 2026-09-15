@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>OldMilk — WebGL1 Milkdrop-style visualizer (iPad 2 / iOS 9.3.5)</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; background: #111; color: #eee; }
+  header, .wrap { padding: 16px 20px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.desc { font-size: 12px; color: #9cf; margin: 0 0 12px; }
+  canvas { width: 100%; max-width: 640px; height: 280px; background: #000; border: 1px solid #333; display: block; }
+  .controls { margin: 12px 0; }
+  button, select { background: #222; color: #eee; border: 1px solid #444; padding: 8px 12px; margin-right: 8px; font-size: 13px; }
+  button.on { background: #2a6; }
+  label { font-size: 12px; margin-right: 6px; }
+  .note { font-size: 11px; color: #888; margin-top: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OldMilk — Milkdrop-style visualizer</h1>
+  <p class="desc">ES5 + WebGL 1 · runs on iPad 2 / iOS 9.3.5 Safari · falls back to Canvas 2D</p>
+</header>
+<div class="wrap">
+  <canvas id="viz" width="640" height="280"></canvas>
+  <div class="controls">
+    <label>Preset
+      <select id="preset">
+        <option>Geiss - Blue Fusion</option>
+        <option>Geiss - Spiky</option>
+        <option>Flexi - Hypno</option>
+        <option>Mercury - Wave</option>
+        <option>Euphoric - Lights</option>
+      </select>
+    </label>
+    <button id="tone">Test Tone (Web Audio)</button>
+    <span id="mode"></span>
+  </div>
+  <p class="note" id="note"></p>
+</div>
+
+<script src="src/oldmilk.js"></script>
+<script>
+(function () {
+  var canvas = document.getElementById('viz');
+  var viz = OldMilk.createVisualizer(canvas, { width: 640, height: 280 });
+  var audioCtx = null, osc = null, gain = null, analyser = null;
+  var lfo = null, toneOn = false;
+
+  var modeEl = document.getElementById('mode');
+  modeEl.innerHTML = 'Mode: ' + (viz.isWebGL() ? 'WebGL 1' : 'Canvas 2D');
+  document.getElementById('note').innerHTML =
+    'If WebGL 1 fails, this silently uses Canvas 2D — same presets, same code. ' +
+    'No WebGL2, no WASM, no ES6 required.';
+
+  function startTone() {
+    if (toneOn) return;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) { return; }
+    osc = audioCtx.createOscillator();
+    gain = audioCtx.createGain();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    gain.gain.value = 0.15;
+    osc.frequency.value = 110;
+    osc.type = 'sawtooth';
+    osc.connect(gain); gain.connect(analyser); analyser.connect(audioCtx.destination);
+    lfo = audioCtx.createOscillator();
+    var lfoGain = audioCtx.createGain();
+    lfo.frequency.value = 4; lfoGain.gain.value = 60;
+    lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+    osc.start(); lfo.start();
+    viz.setAudioSource(analyser);
+    toneOn = true;
+    document.getElementById('tone').className = 'on';
+    document.getElementById('tone').innerHTML = 'Test Tone On';
+  }
+  function stopTone() {
+    if (!toneOn) return;
+    try { lfo.stop(); } catch (e) {}
+    try { osc.stop(); } catch (e) {}
+    try { audioCtx.close(); } catch (e) {}
+    osc = null; gain = null; analyser = null; audioCtx = null; lfo = null; toneOn = false;
+    viz.setAudioSource(null);
+    document.getElementById('tone').className = '';
+    document.getElementById('tone').innerHTML = 'Test Tone (Web Audio)';
+  }
+  document.getElementById('tone').addEventListener('click', function () {
+    if (toneOn) stopTone(); else startTone();
+  });
+
+  var sel = document.getElementById('preset');
+  sel.addEventListener('change', function () { viz.loadPreset(sel.value); });
+
+  function loop() {
+    viz.render();
+    if (window.requestAnimationFrame) requestAnimationFrame(loop);
+    else setTimeout(loop, 16);
+  }
+  if (window.requestAnimationFrame) requestAnimationFrame(loop);
+  else setTimeout(loop, 30);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "oldmilk",
+  "version": "0.1.0",
+  "description": "ES5 + WebGL 1 Milkdrop-style visualizer for iPad 2 / iOS 9.3.5 (no WebGL2, no WASM, no ES6).",
+  "main": "src/oldmilk.js",
+  "files": ["src"],
+  "keywords": ["milkdrop", "visualizer", "webgl", "webgl1", "audio", "es5", "ios9", "ipad2"],
+  "license": "MIT",
+  "scripts": {
+    "test": "node tests/validate.js",
+    "serve": "python3 -m http.server 8080"
+  }
+}

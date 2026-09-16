@@ -25,12 +25,16 @@
   var BINS = 48;
   // Keep analyser data at 48 bins, but use a conservative 16-bin shader interface for older WebGL 1 GPUs.
   var GL_BINS = 16;
+  // zoom/rot/warp/decay are applied to the previous frame every draw (rendered via an
+  // offscreen framebuffer feedback loop), producing Milkdrop-style trails/tunnels on WebGL 1.
   var PRESETS = {
-    'Geiss - Blue Fusion': { hue: 0.62, wave: 0.35, bars: 0.5, speed: 0.9 },
-    'Geiss - Spiky':        { hue: 0.05, wave: 0.15, bars: 1.0, speed: 1.3 },
-    'Flexi - Hypno':        { hue: 0.85, wave: 0.6,  bars: 0.5, speed: 0.6 },
-    'Mercury - Wave':       { hue: 0.45, wave: 1.0,  bars: 0.1, speed: 0.7 },
-    'Euphoric - Lights':    { hue: 0.90, wave: 0.4,  bars: 0.9, speed: 1.1 }
+    'Geiss - Blue Fusion':    { hue: 0.62, wave: 0.35, bars: 0.5, speed: 0.9, zoom: 0.985, rot: 0.010, warp: 0.4, decay: 0.94 },
+    'Geiss - Spiky':          { hue: 0.05, wave: 0.15, bars: 1.0, speed: 1.3, zoom: 0.970, rot: -0.020, warp: 0.6, decay: 0.90 },
+    'Flexi - Hypno':          { hue: 0.85, wave: 0.6,  bars: 0.5, speed: 0.6, zoom: 1.015, rot: 0.030, warp: 0.5, decay: 0.95 },
+    'Mercury - Wave':         { hue: 0.45, wave: 1.0,  bars: 0.1, speed: 0.7, zoom: 0.995, rot: 0.005, warp: 0.2, decay: 0.97 },
+    'Euphoric - Lights':      { hue: 0.90, wave: 0.4,  bars: 0.9, speed: 1.1, zoom: 0.980, rot: -0.015, warp: 0.45, decay: 0.92 },
+    'Martin - Tunnel Vision': { hue: 0.55, wave: 0.2,  bars: 0.3, speed: 0.8, zoom: 0.960, rot: 0.000, warp: 0.15, decay: 0.90 },
+    'Aderrasi - Starfield':   { hue: 0.15, wave: 0.1,  bars: 0.2, speed: 1.0, zoom: 0.920, rot: 0.008, warp: 0.10, decay: 0.88 }
   };
 
   function findCanvas() {
@@ -46,12 +50,18 @@
     'attribute vec2 aPos;\n' +
     'void main(){ gl_Position=vec4(aPos,0.0,1.0); }\n';
 
-  var FRAG_SRC =
+  // Warps + decays the previous frame (read from uPrevTex) then adds new audio-reactive
+  // content on top. Rendering this to an offscreen texture every frame and feeding the
+  // result back in as uPrevTex is what produces Milkdrop-style trails/zoom/rotation using
+  // only core WebGL 1 features (render-to-texture, no extensions required).
+  var MAIN_FRAG_SRC =
     'precision mediump float;\n' +
     'uniform float uTime;\n' +
     'uniform vec2 uRes;\n' +
     'uniform float uBands[' + GL_BINS + '];\n' +
     'uniform float uHue,uWave,uBars,uSpeed;\n' +
+    'uniform float uZoom,uRot,uWarp,uDecay;\n' +
+    'uniform sampler2D uPrevTex;\n' +
     'vec3 hsv2rgb(vec3 c){vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.wzw);return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);}\n' +
     'float bandAt(float x){\n' +
     '  if(x < 0.062500) return uBands[0];\n' +
@@ -77,8 +87,8 @@
     '  float t = uTime*uSpeed;\n' +
     '  float bass = uBands[0]+uBands[1], mid=uBands[7]+uBands[8], treb=uBands[13]+uBands[15];\n' +
     '  float m = (bass+mid+treb)/3.0;\n' +
-    '  vec2 p = uv-0.5;p.x*=uRes.x/uRes.y;\n' +
-    '  float ang = atan(p.y,p.x)+t*0.3, rad = length(p)*4.0;\n' +
+    '  vec2 c = uv-0.5; c.x *= uRes.x/uRes.y;\n' +
+    '  float ang = atan(c.y,c.x)+t*0.3, rad = length(c)*4.0;\n' +
     '  float field = sin(rad*5.0-t*2.0)*cos(ang*3.0+t*1.4)+sin(rad*9.0-t*0.8+bass*6.0)*0.5;\n' +
     '  float waveBand = bandAt(uv.x);\n' +
     '  float wave = 0.0;\n' +
@@ -86,9 +96,27 @@
     '  float bars = 0.0;\n' +
     '  if(uBars>0.0){float x = uv.x*16.0; float f=bandAt(x/16.0); bars=smoothstep(f*uBars,f*uBars+0.05,1.0-uv.y)*0.6;}\n' +
     '  float glow = field*0.5+0.5+m*0.4;\n' +
-    '  vec3 col = hsv2rgb(vec3(uHue,0.8,glow));\n' +
-    '  col += vec3(0.1,0.4,1.0)*(sqrt(bars)+wave*0.8);\n' +
-    '  gl_FragColor = vec4(col,1.0);\n' +
+    '  vec3 newCol = hsv2rgb(vec3(uHue,0.8,glow));\n' +
+    '  newCol += vec3(0.1,0.4,1.0)*(sqrt(bars)+wave*0.8);\n' +
+    '  float zoom = uZoom - bass*0.02;\n' +
+    '  float rot = uRot + treb*0.01;\n' +
+    '  float ca = cos(rot), sa = sin(rot);\n' +
+    '  vec2 pc = vec2(c.x*ca - c.y*sa, c.x*sa + c.y*ca) * zoom;\n' +
+    '  pc += uWarp*0.03*vec2(sin(pc.y*6.0+t*0.9), cos(pc.x*6.0+t*1.1));\n' +
+    '  pc.x /= uRes.x/uRes.y;\n' +
+    '  vec2 srcUv = pc + 0.5;\n' +
+    '  vec3 prevCol = texture2D(uPrevTex, srcUv).rgb * uDecay;\n' +
+    '  gl_FragColor = vec4(prevCol + newCol*0.55, 1.0);\n' +
+    '}\n';
+
+  // Simple textured-quad blit to move the offscreen accumulated frame onto the visible canvas.
+  var BLIT_FRAG_SRC =
+    'precision mediump float;\n' +
+    'uniform sampler2D uTex;\n' +
+    'uniform vec2 uRes;\n' +
+    'void main(){\n' +
+    '  vec2 uv = gl_FragCoord.xy/uRes;\n' +
+    '  gl_FragColor = vec4(texture2D(uTex, uv).rgb, 1.0);\n' +
     '}\n';
 
   function createVisualizer(canvasOrId, opts) {
@@ -98,11 +126,63 @@
     var canvas = canvasOrId;
     // Prevent the standalone auto-init below from also attaching to this canvas and fighting over frames.
     canvas.setAttribute('data-oldmilk-inited', '1');
-    var gl = null, prog = null, uRes, uTime, uHue, uWave, uBars, uSpeed, uBands, useGL = false;
+    var gl = null, mainProg = null, blitProg = null, useGL = false;
+    var mUniforms = {}, bUniforms = {}, quadBuf = null;
+    var fbos = [null, null], fboTex = [null, null], curFbo = 0;
     var bandArr = new Float32Array(BINS);
     var glBandArr = new Float32Array(GL_BINS);
     var params = PRESETS['Geiss - Blue Fusion'];
     var audio = null, g2d = null, t = 0;
+
+    function compileProgram(fragSrc) {
+      var vs = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vs, VERT_SRC); gl.compileShader(vs);
+      if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) return null;
+      var fs = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fs, fragSrc); gl.compileShader(fs);
+      if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) return null;
+      var prog = gl.createProgram();
+      gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+      return prog;
+    }
+
+    // Both programs share one full-screen-triangle buffer; the attrib pointer is rebound
+    // per-program right before drawing since attribute locations aren't guaranteed to match.
+    function bindQuad(prog) {
+      if (!quadBuf) {
+        quadBuf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+      } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+      }
+      var aPos = gl.getAttribLocation(prog, 'aPos');
+      gl.enableVertexAttribArray(aPos);
+      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    }
+
+    // Two ping-ponged render targets hold the accumulated trail frame; core WebGL 1
+    // render-to-texture, no extensions needed (NPOT is fine without mipmaps/REPEAT).
+    function initFBOs() {
+      for (var i = 0; i < 2; i++) {
+        if (fboTex[i]) gl.deleteTexture(fboTex[i]);
+        if (fbos[i]) gl.deleteFramebuffer(fbos[i]);
+        var tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        var fbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+        fboTex[i] = tex; fbos[i] = fbo;
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      curFbo = 0;
+    }
 
     // WebGL 1 init
     (function initGL() {
@@ -110,28 +190,31 @@
         gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
       } catch (e) { gl = null; }
       if (!gl) return;
-      var vs = gl.createShader(gl.VERTEX_SHADER);
-      gl.shaderSource(vs, VERT_SRC); gl.compileShader(vs);
-      if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) { gl = null; return; }
-      var fs = gl.createShader(gl.FRAGMENT_SHADER);
-      gl.shaderSource(fs, FRAG_SRC); gl.compileShader(fs);
-      if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) { gl = null; return; }
-      prog = gl.createProgram();
-      gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
-      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { gl = null; return; }
-      var buf = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
-      var aPos = gl.getAttribLocation(prog, 'aPos');
-      gl.enableVertexAttribArray(aPos);
-      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-      uRes = gl.getUniformLocation(prog, 'uRes');
-      uTime = gl.getUniformLocation(prog, 'uTime');
-      uHue = gl.getUniformLocation(prog, 'uHue');
-      uWave = gl.getUniformLocation(prog, 'uWave');
-      uBars = gl.getUniformLocation(prog, 'uBars');
-      uSpeed = gl.getUniformLocation(prog, 'uSpeed');
-      uBands = gl.getUniformLocation(prog, 'uBands');
+      mainProg = compileProgram(MAIN_FRAG_SRC);
+      blitProg = compileProgram(BLIT_FRAG_SRC);
+      if (!mainProg || !blitProg) { gl = null; return; }
+
+      gl.useProgram(mainProg);
+      bindQuad(mainProg);
+      mUniforms.uRes = gl.getUniformLocation(mainProg, 'uRes');
+      mUniforms.uTime = gl.getUniformLocation(mainProg, 'uTime');
+      mUniforms.uHue = gl.getUniformLocation(mainProg, 'uHue');
+      mUniforms.uWave = gl.getUniformLocation(mainProg, 'uWave');
+      mUniforms.uBars = gl.getUniformLocation(mainProg, 'uBars');
+      mUniforms.uSpeed = gl.getUniformLocation(mainProg, 'uSpeed');
+      mUniforms.uBands = gl.getUniformLocation(mainProg, 'uBands');
+      mUniforms.uZoom = gl.getUniformLocation(mainProg, 'uZoom');
+      mUniforms.uRot = gl.getUniformLocation(mainProg, 'uRot');
+      mUniforms.uWarp = gl.getUniformLocation(mainProg, 'uWarp');
+      mUniforms.uDecay = gl.getUniformLocation(mainProg, 'uDecay');
+      mUniforms.uPrevTex = gl.getUniformLocation(mainProg, 'uPrevTex');
+
+      gl.useProgram(blitProg);
+      bindQuad(blitProg);
+      bUniforms.uRes = gl.getUniformLocation(blitProg, 'uRes');
+      bUniforms.uTex = gl.getUniformLocation(blitProg, 'uTex');
+
+      initFBOs();
       useGL = true;
     })();
 
@@ -154,26 +237,53 @@
       t += 0.016;
       updateBands();
       if (useGL) {
-        gl.viewport(0, 0, width, height);
-        gl.useProgram(prog);
-        gl.uniform2f(uRes, width, height);
-        gl.uniform1f(uTime, t);
-        gl.uniform1f(uHue, params.hue);
-        gl.uniform1f(uWave, params.wave);
-        gl.uniform1f(uBars, params.bars);
-        gl.uniform1f(uSpeed, params.speed);
         var bin = 0;
         for (bin = 0; bin < GL_BINS; bin++) {
           glBandArr[bin] = (bandArr[bin * 3] + bandArr[bin * 3 + 1] + bandArr[bin * 3 + 2]) / 3;
         }
-        gl.uniform1fv(uBands, glBandArr);
+
+        var readIdx = curFbo, writeIdx = 1 - curFbo;
+
+        // Pass 1: warp+decay the previous accumulated frame and add new content into the other FBO.
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[writeIdx]);
+        gl.viewport(0, 0, width, height);
+        gl.useProgram(mainProg);
+        bindQuad(mainProg);
+        gl.uniform2f(mUniforms.uRes, width, height);
+        gl.uniform1f(mUniforms.uTime, t);
+        gl.uniform1f(mUniforms.uHue, params.hue);
+        gl.uniform1f(mUniforms.uWave, params.wave);
+        gl.uniform1f(mUniforms.uBars, params.bars);
+        gl.uniform1f(mUniforms.uSpeed, params.speed);
+        gl.uniform1f(mUniforms.uZoom, params.zoom);
+        gl.uniform1f(mUniforms.uRot, params.rot);
+        gl.uniform1f(mUniforms.uWarp, params.warp);
+        gl.uniform1f(mUniforms.uDecay, params.decay);
+        gl.uniform1fv(mUniforms.uBands, glBandArr);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, fboTex[readIdx]);
+        gl.uniform1i(mUniforms.uPrevTex, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        curFbo = writeIdx;
+
+        // Pass 2: blit the freshly accumulated frame to the visible canvas.
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, width, height);
+        gl.useProgram(blitProg);
+        bindQuad(blitProg);
+        gl.uniform2f(bUniforms.uRes, width, height);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, fboTex[curFbo]);
+        gl.uniform1i(bUniforms.uTex, 0);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         return;
       }
       if (!g2d) { try { g2d = canvas.getContext('2d'); } catch (e) { g2d = null; } }
       if (!g2d) return;
       var W = canvas.width, H = canvas.height;
-      g2d.fillStyle = '#000'; g2d.fillRect(0, 0, W, H);
+      // Trail fade (instead of a full clear) gives the Canvas 2D fallback a milder Milkdrop-like persistence.
+      g2d.fillStyle = 'rgba(0,0,0,' + (1 - params.decay) + ')'; g2d.fillRect(0, 0, W, H);
       var bass = bandArr[2], mid = bandArr[16], treb = bandArr[40];
       var hue = params.hue * 360;
       for (var i = 0; i < 14; i++) {
@@ -208,7 +318,10 @@
       loadPreset: function (name) { if (PRESETS[name]) { params = PRESETS[name]; return true; } return false; },
       presetNames: function () { return Object.keys(PRESETS); },
       render: render,
-      resize: function (w, h) { width = w; height = h; canvas.width = w; canvas.height = h; },
+      resize: function (w, h) {
+        width = w; height = h; canvas.width = w; canvas.height = h;
+        if (useGL) initFBOs();
+      },
       isWebGL: function () { return useGL; },
       getBands: function () { return bandArr; }
     };

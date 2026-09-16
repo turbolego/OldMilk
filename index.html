@@ -34,8 +34,11 @@
       <option>Euphoric - Lights</option>
     </select>
     <button id="tone">Test Tone</button>
+    <button id="song">Play Song</button>
   </div>
   <p class="note" id="note"></p>
+  <p class="note">Song: J.S. Bach — Three Part Inventions (Sinfonia II, Sinfonia III), performed by The U.S. Army Brass Quintet. Public domain, courtesy of <a href="https://musopen.org/music/3906-15-sinfonias-bwv-787-801/" style="color:#9cf;">Musopen</a>.</p>
+  <audio id="song-audio" src="audio/Bach - Three Part Inventions - Sinfonia II, Sinfonia III.mp3" preload="none"></audio>
 </div>
 
 <script src="src/oldmilk.js"></script>
@@ -44,6 +47,15 @@
   var canvas = document.getElementById('milkdrop-canvas');
   var viz = OldMilk.createVisualizer(canvas, { width: 275, height: 116 });
   var audioCtx = null, osc = null, gain = null, analyser = null, lfo = null, toneOn = false;
+  var songAudio = document.getElementById('song-audio');
+  var songCtx = null, songAnalyser = null, songSource = null, songOn = false;
+
+  function stopSong() {
+    if (!songOn) return;
+    songAudio.pause();
+    songOn = false;
+    document.getElementById('song').innerHTML = 'Play Song';
+  }
 
   document.getElementById('note').innerHTML = viz.isWebGL() ? 'WebGL 1 mode' : 'Canvas 2D fallback mode';
   document.getElementById('tone').onclick = function () {
@@ -56,6 +68,7 @@
       document.getElementById('tone').innerHTML = 'Test Tone';
       document.getElementById('note').innerHTML = 'Synthetic mode';
     } else {
+      stopSong();
       try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return; }
       osc = audioCtx.createOscillator();
       gain = audioCtx.createGain();
@@ -77,6 +90,36 @@
   };
 
   document.getElementById('preset').onchange = function () { viz.loadPreset(this.value); };
+
+  document.getElementById('song').onclick = function () {
+    if (songOn) {
+      stopSong();
+      viz.setAudioSource(null);
+      document.getElementById('note').innerHTML = 'Synthetic mode';
+      return;
+    }
+    if (toneOn) { document.getElementById('tone').onclick(); }
+    if (!songCtx) { try { songCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return; } }
+    if (!songSource) {
+      songSource = songCtx.createMediaElementSource(songAudio);
+      songAnalyser = songCtx.createAnalyser();
+      songAnalyser.fftSize = 256;
+      songSource.connect(songAnalyser);
+      songAnalyser.connect(songCtx.destination);
+    }
+    songAudio.currentTime = 0;
+    songAudio.play();
+    viz.setAudioSource(songAnalyser);
+    songOn = true;
+    document.getElementById('song').innerHTML = 'Stop Song';
+    document.getElementById('note').innerHTML = 'Song playback mode';
+  };
+  songAudio.onended = function () {
+    stopSong();
+    viz.setAudioSource(null);
+    document.getElementById('note').innerHTML = 'Synthetic mode';
+  };
+
 
   function loop() {
     viz.render();

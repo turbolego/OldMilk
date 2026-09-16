@@ -96,6 +96,8 @@
     var width = opts.width || 275, height = opts.height || 116;
     if (typeof canvasOrId === 'string') canvasOrId = findCanvas();
     var canvas = canvasOrId;
+    // Prevent the standalone auto-init below from also attaching to this canvas and fighting over frames.
+    canvas.setAttribute('data-oldmilk-inited', '1');
     var gl = null, prog = null, uRes, uTime, uHue, uWave, uBars, uSpeed, uBands, useGL = false;
     var bandArr = new Float32Array(BINS);
     var glBandArr = new Float32Array(GL_BINS);
@@ -216,7 +218,7 @@
   if (typeof window !== 'undefined') {
     function startVisualizer() {
       var canvas = findCanvas();
-      if (canvas) {
+      if (canvas && !canvas.getAttribute('data-oldmilk-inited')) {
         canvas.width = 275; canvas.height = 116;
         window.oldmilkViz = createVisualizer(canvas);
         (function loop() {

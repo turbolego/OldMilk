@@ -95,9 +95,10 @@
     '  if(uWave>0.0){float f=waveBand;float y=0.5+(f-0.5)*uWave*(0.5+bass);wave=1.0-smoothstep(0.0,0.012,abs(uv.y-y));}\n' +
     '  float bars = 0.0;\n' +
     '  if(uBars>0.0){float x = uv.x*16.0; float f=bandAt(x/16.0); bars=smoothstep(f*uBars,f*uBars+0.05,1.0-uv.y)*0.6;}\n' +
-    '  float glow = field*0.5+0.5+m*0.4;\n' +
+    '  float glow = clamp(field*0.5+0.5+m*0.4, 0.0, 1.0);\n' +
     '  vec3 newCol = hsv2rgb(vec3(uHue,0.8,glow));\n' +
     '  newCol += vec3(0.1,0.4,1.0)*(sqrt(bars)+wave*0.8);\n' +
+    '  newCol = clamp(newCol, 0.0, 1.0);\n' +
     '  float zoom = uZoom - bass*0.02;\n' +
     '  float rot = uRot + treb*0.01;\n' +
     '  float ca = cos(rot), sa = sin(rot);\n' +
@@ -106,7 +107,8 @@
     '  pc.x /= uRes.x/uRes.y;\n' +
     '  vec2 srcUv = pc + 0.5;\n' +
     '  vec3 prevCol = texture2D(uPrevTex, srcUv).rgb * uDecay;\n' +
-    '  gl_FragColor = vec4(prevCol + newCol*0.55, 1.0);\n' +
+    '  vec3 addCol = newCol * (1.0-uDecay) * 1.4;\n' +
+    '  gl_FragColor = vec4(clamp(prevCol + addCol, 0.0, 1.0), 1.0);\n' +
     '}\n';
 
   // Simple textured-quad blit to move the offscreen accumulated frame onto the visible canvas.

@@ -11,8 +11,9 @@ var src = fs.readFileSync(file, 'utf8');
 var ok = true;
 var errors = [];
 
-// 1. no ES6 features
-if (/\b(let |const |=>|`.*`)/.test(src.replace(/['"][^'"]*['"]/g, '').replace(/\/\/.*$/gm, ''))) {
+// 1. no ES6 features; strip comments first so documentation examples do not match
+var syntaxSource = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '').replace(/['"][^'"]*['"]/g, '');
+if (/\b(let |const |=>|`.*`)/.test(syntaxSource)) {
   errors.push('FAIL: ES6 syntax detected (let/const/template literals/arrow)');
 }
 

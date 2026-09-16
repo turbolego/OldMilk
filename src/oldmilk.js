@@ -23,6 +23,8 @@
   'use strict';
 
   var BINS = 48;
+  // Keep analyser data at 48 bins, but use a conservative 16-bin shader interface for older WebGL 1 GPUs.
+  var GL_BINS = 16;
   var PRESETS = {
     'Geiss - Blue Fusion': { hue: 0.62, wave: 0.35, bars: 0.5, speed: 0.9 },
     'Geiss - Spiky':        { hue: 0.05, wave: 0.15, bars: 1.0, speed: 1.3 },
@@ -48,21 +50,41 @@
     'precision mediump float;\n' +
     'uniform float uTime;\n' +
     'uniform vec2 uRes;\n' +
-    'uniform float uBands[' + BINS + '];\n' +
+    'uniform float uBands[' + GL_BINS + '];\n' +
     'uniform float uHue,uWave,uBars,uSpeed;\n' +
     'vec3 hsv2rgb(vec3 c){vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.wzw);return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);}\n' +
+    'float bandAt(float x){\n' +
+    '  if(x < 0.062500) return uBands[0];\n' +
+    '  if(x < 0.125000) return uBands[1];\n' +
+    '  if(x < 0.187500) return uBands[2];\n' +
+    '  if(x < 0.250000) return uBands[3];\n' +
+    '  if(x < 0.312500) return uBands[4];\n' +
+    '  if(x < 0.375000) return uBands[5];\n' +
+    '  if(x < 0.437500) return uBands[6];\n' +
+    '  if(x < 0.500000) return uBands[7];\n' +
+    '  if(x < 0.562500) return uBands[8];\n' +
+    '  if(x < 0.625000) return uBands[9];\n' +
+    '  if(x < 0.687500) return uBands[10];\n' +
+    '  if(x < 0.750000) return uBands[11];\n' +
+    '  if(x < 0.812500) return uBands[12];\n' +
+    '  if(x < 0.875000) return uBands[13];\n' +
+    '  if(x < 0.937500) return uBands[14];\n' +
+    '  if(x < 1.000000) return uBands[15];\n' +
+    '  return uBands[15];\n' +
+    '}\n' +
     'void main(){\n' +
     '  vec2 uv = gl_FragCoord.xy/uRes;\n' +
     '  float t = uTime*uSpeed;\n' +
-    '  float bass = uBands[1]+uBands[2], mid=uBands[14]+uBands[16], treb=uBands[34]+uBands[40];\n' +
+    '  float bass = uBands[0]+uBands[1], mid=uBands[7]+uBands[8], treb=uBands[13]+uBands[15];\n' +
     '  float m = (bass+mid+treb)/3.0;\n' +
     '  vec2 p = uv-0.5;p.x*=uRes.x/uRes.y;\n' +
     '  float ang = atan(p.y,p.x)+t*0.3, rad = length(p)*4.0;\n' +
     '  float field = sin(rad*5.0-t*2.0)*cos(ang*3.0+t*1.4)+sin(rad*9.0-t*0.8+bass*6.0)*0.5;\n' +
+    '  float waveBand = bandAt(uv.x);\n' +
     '  float wave = 0.0;\n' +
-    '  if(uWave>0.0){float x = uv.x*float(' + BINS + ');int ix=int(x);float f=uBands[clamp(ix,0,' + (BINS-1) + ')];float y=0.5+(f-0.5)*uWave*(0.5+bass);wave=1.0-smoothstep(0.0,0.012,abs(uv.y-y));}\n' +
+    '  if(uWave>0.0){float f=waveBand;float y=0.5+(f-0.5)*uWave*(0.5+bass);wave=1.0-smoothstep(0.0,0.012,abs(uv.y-y));}\n' +
     '  float bars = 0.0;\n' +
-    '  if(uBars>0.0){float x = uv.x*16.0; int bx=int(x); float f=uBands[clamp(bx*3,0,' + (BINS-1) + ')]; bars=smoothstep(f*uBars,f*uBars+0.05,1.0-uv.y)*0.6;}\n' +
+    '  if(uBars>0.0){float x = uv.x*16.0; float f=bandAt(x/16.0); bars=smoothstep(f*uBars,f*uBars+0.05,1.0-uv.y)*0.6;}\n' +
     '  float glow = field*0.5+0.5+m*0.4;\n' +
     '  vec3 col = hsv2rgb(vec3(uHue,0.8,glow));\n' +
     '  col += vec3(0.1,0.4,1.0)*(sqrt(bars)+wave*0.8);\n' +
@@ -76,6 +98,7 @@
     var canvas = canvasOrId;
     var gl = null, prog = null, uRes, uTime, uHue, uWave, uBars, uSpeed, uBands, useGL = false;
     var bandArr = new Float32Array(BINS);
+    var glBandArr = new Float32Array(GL_BINS);
     var params = PRESETS['Geiss - Blue Fusion'];
     var audio = null, g2d = null, t = 0;
 
@@ -87,11 +110,13 @@
       if (!gl) return;
       var vs = gl.createShader(gl.VERTEX_SHADER);
       gl.shaderSource(vs, VERT_SRC); gl.compileShader(vs);
+      if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) { gl = null; return; }
       var fs = gl.createShader(gl.FRAGMENT_SHADER);
       gl.shaderSource(fs, FRAG_SRC); gl.compileShader(fs);
+      if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) { gl = null; return; }
       prog = gl.createProgram();
       gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
-      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return;
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { gl = null; return; }
       var buf = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, buf);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
@@ -135,7 +160,11 @@
         gl.uniform1f(uWave, params.wave);
         gl.uniform1f(uBars, params.bars);
         gl.uniform1f(uSpeed, params.speed);
-        gl.uniform1fv(uBands, bandArr);
+        var bin = 0;
+        for (bin = 0; bin < GL_BINS; bin++) {
+          glBandArr[bin] = (bandArr[bin * 3] + bandArr[bin * 3 + 1] + bandArr[bin * 3 + 2]) / 3;
+        }
+        gl.uniform1fv(uBands, glBandArr);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         return;
       }
@@ -174,7 +203,7 @@
 
     return {
       setAudioSource: function (src) { audio = src; },
-      loadPreset: function (name) { if (allowed[name]) { params = PRESETS[name]; return true; } return false; },
+      loadPreset: function (name) { if (PRESETS[name]) { params = PRESETS[name]; return true; } return false; },
       presetNames: function () { return Object.keys(PRESETS); },
       render: render,
       resize: function (w, h) { width = w; height = h; canvas.width = w; canvas.height = h; },

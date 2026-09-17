@@ -46,11 +46,10 @@ requestAnimationFrame(loop);
 
 ## Demo audio
 
-`index.html` includes a "Play Song" button that feeds `audio/Bach - Three Part Inventions - Sinfonia II, Sinfonia III.mp3` through a Web Audio `AnalyserNode` into the visualizer, as an alternative to the synthesized "Test Tone".
+`index.html` includes a "Play Song" button that feeds `audio/Grieg - Peer Gynt Suite No. 1 - In the Hall of the Mountain King.mp3` through a Web Audio `AnalyserNode` into the visualizer, as an alternative to the synthesized "Test Tone".
 
-- **Track:** J.S. Bach — *Three Part Inventions* (Sinfonia II, Sinfonia III)
-- **Performer:** The U.S. Army Brass Quintet
-- **Source:** [musopen.org/music/3906-15-sinfonias-bwv-787-801](https://musopen.org/music/3906-15-sinfonias-bwv-787-801/)
+- **Track:** Edvard Grieg — *Peer Gynt Suite No. 1, Op. 46*: In the Hall of the Mountain King
+- **Source:** [musopen.org/music/777-peer-gynt-suite-no-1-op-46](https://musopen.org/music/777-peer-gynt-suite-no-1-op-46/)
 - **License:** Public domain (credited here for attribution purposes even though not legally required)
 
 ## API

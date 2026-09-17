@@ -6,17 +6,26 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>OldMilk — WebGL1 Milkdrop-style visualizer (iPad 2 / iOS 9.3.5)</title>
 <style>
-  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; background: #111; color: #eee; }
-  header, .wrap { padding: 16px 20px; }
-  .wrap { text-align: center; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: -apple-system, system-ui, sans-serif; background: #111; color: #eee; }
+  header, main { padding: 16px 20px; max-width: 600px; margin: 0 auto; }
+  main { text-align: center; }
   h1 { font-size: 18px; margin: 0 0 4px; }
   p.desc { font-size: 12px; color: #9cf; margin: 0 0 12px; }
-  #milkdrop-canvas { width: 100%; max-width: 275px; height: 116px; background: #000; border: 1px solid #333; display: block; margin: 0 auto; }
-  .controls { margin: 12px 0; text-align: center; }
-  button, select { background: #222; color: #eee; border: 1px solid #444; padding: 8px 12px; margin-right: 8px; font-size: 13px; }
+  .canvas-wrap { width: 100%; max-width: 275px; margin: 0 auto; }
+  #milkdrop-canvas { width: 100%; height: auto; display: block; background: #000; border: 1px solid #333; }
+  .controls { margin: 12px 0; }
+  .controls, .field { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; -webkit-box-align: center; -webkit-align-items: center; align-items: center; }
+  .field { margin-bottom: 8px; }
+  .field label { font-size: 12px; margin-right: 6px; }
+  button, select { background: #222; color: #eee; border: 1px solid #444; padding: 8px 12px; margin: 4px; font-size: 13px; -webkit-appearance: none; appearance: none; border-radius: 4px; }
+  button { min-width: 44px; min-height: 44px; }
   button.on { background: #2a6; }
-  label { font-size: 12px; margin-right: 6px; }
-  .note { font-size: 11px; color: #888; margin-top: 12px; text-align: center; }
+  .note { font-size: 11px; color: #888; margin-top: 12px; }
+  @media (min-width: 480px) {
+    .canvas-wrap { max-width: 400px; }
+  }
 </style>
 </head>
 <body>
@@ -24,25 +33,30 @@
   <h1>OldMilk — Milkdrop-style visualizer</h1>
   <p class="desc">ES5 + WebGL 1 · runs on iPad 2 / iOS 9.3.5 Safari · falls back to Canvas 2D</p>
 </header>
-<div class="wrap">
-  <canvas id="milkdrop-canvas" width="275" height="116"></canvas>
+<main>
+  <div class="canvas-wrap">
+    <canvas id="milkdrop-canvas" width="275" height="116"></canvas>
+  </div>
   <div class="controls">
-    <select id="preset">
-      <option>Geiss - Blue Fusion</option>
-      <option>Geiss - Spiky</option>
-      <option>Flexi - Hypno</option>
-      <option>Mercury - Wave</option>
-      <option>Euphoric - Lights</option>
-      <option>Martin - Tunnel Vision</option>
-      <option>Aderrasi - Starfield</option>
-    </select>
+    <span class="field">
+      <label for="preset">Preset</label>
+      <select id="preset">
+        <option>Geiss - Blue Fusion</option>
+        <option>Geiss - Spiky</option>
+        <option>Flexi - Hypno</option>
+        <option>Mercury - Wave</option>
+        <option>Euphoric - Lights</option>
+        <option>Martin - Tunnel Vision</option>
+        <option>Aderrasi - Starfield</option>
+      </select>
+    </span>
     <button id="tone">Test Tone</button>
     <button id="song">Play Song</button>
   </div>
   <p class="note" id="note"></p>
   <p class="note">Song: Edvard Grieg — Peer Gynt Suite No. 1, Op. 46: In the Hall of the Mountain King. Public domain, courtesy of <a href="https://musopen.org/music/777-peer-gynt-suite-no-1-op-46/" style="color:#9cf;">Musopen</a>.</p>
   <audio id="song-audio" src="audio/Grieg - Peer Gynt Suite No. 1 - In the Hall of the Mountain King.mp3" preload="none"></audio>
-</div>
+</main>
 
 <script src="src/oldmilk.js"></script>
 <script>

@@ -1,0 +1,39 @@
+name: Publish to npm
+
+# Trusted publishing (OIDC) — no NPM_TOKEN secret needed.
+# Configure this repo/workflow as a trusted publisher for @turbolego/oldmilk at:
+# https://www.npmjs.com/package/@turbolego/oldmilk/access
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing requires npm 11.5.1+; setup-node's bundled npm may be older.
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Publish
+        run: npm publish

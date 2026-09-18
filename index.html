@@ -22,6 +22,7 @@
   button, select { background: #222; color: #eee; border: 1px solid #444; padding: 8px 12px; margin: 4px; font-size: 13px; -webkit-appearance: none; appearance: none; border-radius: 4px; }
   button { min-width: 44px; min-height: 44px; }
   button.on { background: #2a6; }
+  .mode-line { display:flex; justify-content:space-between; max-width:400px; margin:10px auto 0; color:#8fcaad; font:11px monospace; text-transform:uppercase; }
   .note { font-size: 11px; color: #888; margin-top: 12px; }
   @media (min-width: 480px) {
     .canvas-wrap { max-width: 400px; }
@@ -31,12 +32,13 @@
 <body>
 <header>
   <h1>OldMilk — Milkdrop-style visualizer</h1>
-  <p class="desc">ES5 + WebGL 1 · runs on iPad 2 / iOS 9.3.5 Safari · falls back to Canvas 2D</p>
+  <p class="desc">A tiny Milkdrop-inspired engine for WebGL 1 · designed for iPad 2 / iOS 9.3.5 Safari</p>
 </header>
 <main>
   <div class="canvas-wrap">
     <canvas id="milkdrop-canvas" width="275" height="116"></canvas>
   </div>
+  <div class="mode-line"><span id="mode">initialising renderer…</span><span id="fps">60 fps target</span></div>
   <div class="controls">
     <span class="field">
       <label for="preset">Preset</label>
@@ -51,9 +53,9 @@
       </select>
     </span>
     <button id="tone">Test Tone</button>
-    <button id="song">Play Song</button>
+    <button id="song">Play Song</button><button id="pause">Pause</button>
   </div>
-  <p class="note" id="note"></p>
+  <p class="note" id="note"></p><p class="note">Presets combine feedback trails, rotating fields, radial waveforms, and mirrored spectrum columns. Audio is analysed locally in the browser.</p>
   <p class="note">Song: Edvard Grieg — Peer Gynt Suite No. 1, Op. 46: In the Hall of the Mountain King. Public domain, courtesy of <a href="https://musopen.org/music/777-peer-gynt-suite-no-1-op-46/" style="color:#9cf;">Musopen</a>.</p>
   <audio id="song-audio" src="audio/Grieg - Peer Gynt Suite No. 1 - In the Hall of the Mountain King.mp3" preload="none"></audio>
 </main>
@@ -74,7 +76,7 @@
     document.getElementById('song').innerHTML = 'Play Song';
   }
 
-  document.getElementById('note').innerHTML = viz.isWebGL() ? 'WebGL 1 mode' : 'Canvas 2D fallback mode';
+  document.getElementById('note').innerHTML = viz.isWebGL() ? 'WebGL 1 feedback renderer' : 'Canvas 2D fallback renderer'; document.getElementById('mode').innerHTML = viz.isWebGL() ? 'WebGL 1 / feedback' : 'Canvas 2D / fallback';
   document.getElementById('tone').onclick = function () {
     if (toneOn) {
       try { lfo.stop(); } catch(e) {}
@@ -106,7 +108,9 @@
     }
   };
 
-  document.getElementById('preset').onchange = function () { viz.loadPreset(this.value); };
+  document.getElementById('preset').onchange = function () { viz.loadPreset(this.value); document.getElementById('note').innerHTML = 'Preset loaded: ' + this.value; };
+  document.getElementById('pause').onclick = function () { paused = !paused; this.innerHTML = paused ? 'Resume' : 'Pause'; };
+  var paused = false;
 
   document.getElementById('song').onclick = function () {
     if (songOn) {
@@ -139,7 +143,7 @@
 
 
   function loop() {
-    viz.render();
+    if (!paused) viz.render();
     if (window.requestAnimationFrame) requestAnimationFrame(loop);
     else setTimeout(loop, 16);
   }

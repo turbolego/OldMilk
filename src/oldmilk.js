@@ -28,10 +28,10 @@
   // zoom/rot/warp/decay are applied to the previous frame every draw (rendered via an
   // offscreen framebuffer feedback loop), producing Milkdrop-style trails/tunnels on WebGL 1.
   var PRESETS = {
-    'Geiss - Blue Fusion':    { hue: 0.62, wave: 0.35, bars: 0.5, speed: 0.9, zoom: 0.985, rot: 0.010, warp: 0.4, decay: 0.94 },
-    'Geiss - Spiky':          { hue: 0.05, wave: 0.15, bars: 1.0, speed: 1.3, zoom: 0.970, rot: -0.020, warp: 0.6, decay: 0.90 },
-    'Flexi - Hypno':          { hue: 0.85, wave: 0.6,  bars: 0.5, speed: 0.6, zoom: 1.015, rot: 0.030, warp: 0.5, decay: 0.95 },
-    'Mercury - Wave':         { hue: 0.45, wave: 1.0,  bars: 0.1, speed: 0.7, zoom: 0.995, rot: 0.005, warp: 0.2, decay: 0.97 },
+    'Geiss - Blue Fusion':    { hue: 0.62, wave: 0.75, bars: 0.45, speed: 0.9, zoom: 0.985, rot: 0.010, warp: 0.65, decay: 0.94 },
+    'Geiss - Spiky':          { hue: 0.05, wave: 0.65, bars: 1.0, speed: 1.3, zoom: 0.970, rot: -0.020, warp: 0.9, decay: 0.90 },
+    'Flexi - Hypno':          { hue: 0.85, wave: 0.9,  bars: 0.25, speed: 0.6, zoom: 1.015, rot: 0.030, warp: 0.85, decay: 0.95 },
+    'Mercury - Wave':         { hue: 0.45, wave: 1.0,  bars: 0.1, speed: 0.7, zoom: 0.995, rot: 0.005, warp: 0.45, decay: 0.97 },
     'Euphoric - Lights':      { hue: 0.90, wave: 0.4,  bars: 0.9, speed: 1.1, zoom: 0.980, rot: -0.015, warp: 0.45, decay: 0.92 },
     'Martin - Tunnel Vision': { hue: 0.55, wave: 0.2,  bars: 0.3, speed: 0.8, zoom: 0.960, rot: 0.000, warp: 0.15, decay: 0.90 },
     'Aderrasi - Starfield':   { hue: 0.15, wave: 0.1,  bars: 0.2, speed: 1.0, zoom: 0.920, rot: 0.008, warp: 0.10, decay: 0.88 }
@@ -56,60 +56,21 @@
   // only core WebGL 1 features (render-to-texture, no extensions required).
   var MAIN_FRAG_SRC =
     'precision mediump float;\n' +
-    'uniform float uTime;\n' +
-    'uniform vec2 uRes;\n' +
-    'uniform float uBands[' + GL_BINS + '];\n' +
-    'uniform float uHue,uWave,uBars,uSpeed;\n' +
-    'uniform float uZoom,uRot,uWarp,uDecay;\n' +
-    'uniform sampler2D uPrevTex;\n' +
-    'vec3 hsv2rgb(vec3 c){vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.wzw);return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);}\n' +
-    'float bandAt(float x){\n' +
-    '  if(x < 0.062500) return uBands[0];\n' +
-    '  if(x < 0.125000) return uBands[1];\n' +
-    '  if(x < 0.187500) return uBands[2];\n' +
-    '  if(x < 0.250000) return uBands[3];\n' +
-    '  if(x < 0.312500) return uBands[4];\n' +
-    '  if(x < 0.375000) return uBands[5];\n' +
-    '  if(x < 0.437500) return uBands[6];\n' +
-    '  if(x < 0.500000) return uBands[7];\n' +
-    '  if(x < 0.562500) return uBands[8];\n' +
-    '  if(x < 0.625000) return uBands[9];\n' +
-    '  if(x < 0.687500) return uBands[10];\n' +
-    '  if(x < 0.750000) return uBands[11];\n' +
-    '  if(x < 0.812500) return uBands[12];\n' +
-    '  if(x < 0.875000) return uBands[13];\n' +
-    '  if(x < 0.937500) return uBands[14];\n' +
-    '  if(x < 1.000000) return uBands[15];\n' +
-    '  return uBands[15];\n' +
-    '}\n' +
-    'void main(){\n' +
-    '  vec2 uv = gl_FragCoord.xy/uRes;\n' +
-    '  float t = uTime*uSpeed;\n' +
-    '  float bass = uBands[0]+uBands[1], mid=uBands[7]+uBands[8], treb=uBands[13]+uBands[15];\n' +
-    '  float m = (bass+mid+treb)/3.0;\n' +
-    '  vec2 c = uv-0.5; c.x *= uRes.x/uRes.y;\n' +
-    '  float ang = atan(c.y,c.x)+t*0.3, rad = length(c)*4.0;\n' +
-    '  float field = sin(rad*5.0-t*2.0)*cos(ang*3.0+t*1.4)+sin(rad*9.0-t*0.8+bass*6.0)*0.5;\n' +
-    '  float waveBand = bandAt(uv.x);\n' +
-    '  float wave = 0.0;\n' +
-    '  if(uWave>0.0){float f=waveBand;float y=0.5+(f-0.5)*uWave*(0.5+bass);wave=1.0-smoothstep(0.0,0.012,abs(uv.y-y));}\n' +
-    '  float bars = 0.0;\n' +
-    '  if(uBars>0.0){float x = uv.x*16.0; float f=bandAt(x/16.0); bars=smoothstep(f*uBars,f*uBars+0.05,1.0-uv.y)*0.6;}\n' +
-    '  float glow = clamp(field*0.5+0.5+m*0.4, 0.0, 1.0);\n' +
-    '  vec3 newCol = hsv2rgb(vec3(uHue,0.8,glow));\n' +
-    '  newCol += vec3(0.1,0.4,1.0)*(sqrt(bars)+wave*0.8);\n' +
-    '  newCol = clamp(newCol, 0.0, 1.0);\n' +
-    '  float zoom = uZoom - bass*0.02;\n' +
-    '  float rot = uRot + treb*0.01;\n' +
-    '  float ca = cos(rot), sa = sin(rot);\n' +
-    '  vec2 pc = vec2(c.x*ca - c.y*sa, c.x*sa + c.y*ca) * zoom;\n' +
-    '  pc += uWarp*0.03*vec2(sin(pc.y*6.0+t*0.9), cos(pc.x*6.0+t*1.1));\n' +
-    '  pc.x /= uRes.x/uRes.y;\n' +
-    '  vec2 srcUv = pc + 0.5;\n' +
-    '  vec3 prevCol = texture2D(uPrevTex, srcUv).rgb * uDecay;\n' +
-    '  vec3 addCol = newCol * (1.0-uDecay) * 1.4;\n' +
-    '  gl_FragColor = vec4(clamp(prevCol + addCol, 0.0, 1.0), 1.0);\n' +
-    '}\n';
+    'uniform float uTime; uniform vec2 uRes; uniform float uBands[' + GL_BINS + '];\n' +
+    'uniform float uHue,uWave,uBars,uSpeed,uZoom,uRot,uWarp,uDecay; uniform sampler2D uPrevTex;\n' +
+    'vec3 hsv2rgb(vec3 c){vec4 K=vec4(1.,.6666667,.3333333,3.);vec3 p=abs(fract(c.xxx+K.xyz)*6.-K.www);return c.z*mix(K.xxx,clamp(p-K.xxx,0.,1.),c.y);}\n' +
+    'float bandAt(float x){ if(x<.0625)return uBands[0];if(x<.125)return uBands[1];if(x<.1875)return uBands[2];if(x<.25)return uBands[3];if(x<.3125)return uBands[4];if(x<.375)return uBands[5];if(x<.4375)return uBands[6];if(x<.5)return uBands[7];if(x<.5625)return uBands[8];if(x<.625)return uBands[9];if(x<.6875)return uBands[10];if(x<.75)return uBands[11];if(x<.8125)return uBands[12];if(x<.875)return uBands[13];if(x<.9375)return uBands[14];return uBands[15];}\n' +
+    'void main(){ vec2 uv=gl_FragCoord.xy/uRes; float t=uTime*uSpeed; vec2 q=uv-.5; q.x*=uRes.x/uRes.y; float r=length(q); float a=atan(q.y,q.x);\n' +
+    ' float bass=(uBands[0]+uBands[1]+uBands[2])*.3333; float mid=(uBands[6]+uBands[7]+uBands[8]+uBands[9])*.25; float hi=(uBands[13]+uBands[14]+uBands[15])*.3333;\n' +
+    ' float twist=a+sin(r*9.-t*1.7)*uWarp*.22+t*.16; float rings=sin(r*42.-t*3.5+sin(t+r*8.)*uWarp*3.);\n' +
+    ' float pulse=smoothstep(.34,.0,abs(r-(.17+bass*.16+sin(t*1.3)*.025))); float vortex=.5+.5*sin(t+twist*5.+r*18.);\n' +
+    ' float f=bandAt(fract((a/6.2831853)+.5)); float waveY=.5+sin(a*4.+t*2.)*.05+(f-.5)*uWave*.33*(1.+bass);\n' +
+    ' float radial=1.-smoothstep(.0,.018,abs(r-(.20+f*.18))); float wave=radial*(.45+hi*.8);\n' +
+    ' float columns=smoothstep(1.-bandAt(fract(uv.x*16.)),1.,1.-uv.y)*uBars*.35;\n' +
+    ' float glow=clamp(.18+vortex*.25+abs(rings)*.12+pulse*.7+wave+columns+mid*.22,0.,1.);\n' +
+    ' vec3 col=hsv2rgb(vec3(fract(uHue+twist*.035+r*.08),.78,glow)); col+=hsv2rgb(vec3(fract(uHue+.48),.65,wave*.8+columns*.6));\n' +
+    ' float ca=cos(uRot+hi*.012),sa=sin(uRot+hi*.012); vec2 pc=vec2(q.x*ca-q.y*sa,q.x*sa+q.y*ca)*(uZoom-bass*.018); pc+=uWarp*.025*vec2(sin(pc.y*10.+t),cos(pc.x*11.-t*1.2)); pc.x/=(uRes.x/uRes.y);\n' +
+    ' vec3 trail=texture2D(uPrevTex,pc+.5).rgb*uDecay; gl_FragColor=vec4(clamp(trail+col*(1.-uDecay)*1.8,0.,1.),1.); }\n';
 
   // Simple textured-quad blit to move the offscreen accumulated frame onto the visible canvas.
   var BLIT_FRAG_SRC =
@@ -284,33 +245,20 @@
       if (!g2d) { try { g2d = canvas.getContext('2d'); } catch (e) { g2d = null; } }
       if (!g2d) return;
       var W = canvas.width, H = canvas.height;
-      // Trail fade (instead of a full clear) gives the Canvas 2D fallback a milder Milkdrop-like persistence.
+      // Trail fade plus layered rings, radial waveform, and spectrum columns for older Safari.
       g2d.fillStyle = 'rgba(0,0,0,' + (1 - params.decay) + ')'; g2d.fillRect(0, 0, W, H);
       var bass = bandArr[2], mid = bandArr[16], treb = bandArr[40];
-      var hue = params.hue * 360;
-      for (var i = 0; i < 14; i++) {
-        var r = 20 + i * ((16 + mid * 24)) + Math.sin(t * params.speed + i) * (6 + bass * 14);
-        g2d.strokeStyle = 'hsl(' + (hue + i * 14 + t * 30) + ',70%,' + (40 + i * 4) + '%)';
-        g2d.beginPath(); g2d.arc(W/2, H/2, r, 0, Math.PI*2); g2d.stroke();
+      var hue = params.hue * 360, cx = W / 2, cy = H / 2;
+      for (var i = 0; i < 18; i++) {
+        var rr = 8 + i * 7 + Math.sin(t * params.speed * 1.4 + i) * (3 + bass * 14);
+        g2d.strokeStyle = 'hsla(' + (hue + i * 16 + t * 34) + ',85%,' + (42 + i * 2) + '%,' + (0.18 + (18-i)*.018) + ')';
+        g2d.lineWidth = i % 3 === 0 ? 2 : 1; g2d.beginPath(); g2d.arc(cx, cy, rr, 0, Math.PI * 2); g2d.stroke();
       }
       if (params.wave > 0) {
-        g2d.strokeStyle = 'rgba(120,255,200,' + (0.4 + mid * 0.5) + ')';
-        g2d.beginPath();
-        for (var x = 0; x <= W; x += 3) {
-          var f = bandArr[Math.min(BINS-1, Math.floor((x/W)*BINS))];
-          var y = H * (0.5 + (f-0.5) * params.wave * (0.6 + bass));
-          if (x === 0) g2d.moveTo(x, y); else g2d.lineTo(x, y);
-        }
-        g2d.stroke();
+        g2d.strokeStyle = 'hsla(' + (hue + 150) + ',90%,70%,' + (0.5 + mid * .45) + ')'; g2d.lineWidth = 1.5; g2d.beginPath();
+        for (var x = 0; x <= W; x += 2) { var f = bandArr[Math.min(BINS-1, Math.floor((x/W)*BINS))]; var y = H*.5 + Math.sin(x*.055+t*3.)*H*.08 + (f-.5)*H*params.wave*(.75+bass); if(x===0)g2d.moveTo(x,y);else g2d.lineTo(x,y); } g2d.stroke();
       }
-      if (params.bars > 0) {
-        var nb = 12, bw = W/nb;
-        for (var b = 0; b < nb; b++) {
-          var v = bandArr[Math.floor((b/nb)*BINS)] * params.bars;
-          g2d.fillStyle = 'hsl(' + (hue + treb * 60) + ',80%,' + (30 + v * 60) + '%)';
-          g2d.fillRect(b * bw, H - v * H * 0.8, bw - 1, v * H * 0.8);
-        }
-      }
+      if (params.bars > 0) { var nb=16,bw=W/nb; for(var b=0;b<nb;b++){var v=bandArr[Math.floor(b/nb*BINS)]*params.bars;g2d.fillStyle='hsla('+(hue+treb*90+b*8)+',90%,65%,.55)';g2d.fillRect(b*bw,H-v*H*.55,bw-1,v*H*.55);g2d.fillRect(W-(b+1)*bw,H-v*H*.55,bw-1,v*H*.55);}}
     }
 
 

@@ -99,7 +99,7 @@
     var fbos = [null, null], fboTex = [null, null], curFbo = 0;
     var bandArr = new Float32Array(BINS);
     var glBandArr = new Float32Array(GL_BINS);
-    var params = PRESETS['Geiss - Blue Fusion'];
+    var params = PRESETS['Prismatic Hourglass Tunnel'];
     var audio = null, g2d = null, t = 0;
 
     function compileProgram(fragSrc) {

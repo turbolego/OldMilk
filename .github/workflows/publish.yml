@@ -1,8 +1,12 @@
 name: Publish to npm
 
-# Trusted publishing (OIDC) — no NPM_TOKEN secret needed.
-# Configure this repo/workflow as a trusted publisher for @turbolego/oldmilk at:
-# https://www.npmjs.com/package/@turbolego/oldmilk/access
+# Trusted publishing (OIDC) — no NPM_TOKEN secret needed, PROVIDED that npm's
+# trusted publisher for @turbolego/oldmilk is configured with:
+#   Repository owner: turbolego | Repository: OldMilk | Workflow filename: publish.yml
+#   (filename only, not the full .github/workflows/ path) | Environment: <blank>
+# Configure at: https://www.npmjs.com/package/@turbolego/oldmilk/access
+# If NPM_TOKEN is set as a repo secret, it is used instead of OIDC (e.g. for
+# the very first publish of a scoped package, which OIDC cannot bootstrap).
 on:
   release:
     types: [published]
@@ -58,4 +62,6 @@ jobs:
           fi
 
       - name: Publish
-        run: npm publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
